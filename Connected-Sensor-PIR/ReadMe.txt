@@ -43,11 +43,11 @@ Memory Map - 256kb or 32kB divided into 4096 words - the  first one is reserved
 Byte     Value
 The first word is for system data
 0        Memory Map Version (this program expects 2)
-1        accelSensitivity
-2-3       Delay
+1        Available
+2-3      Available
 4        Daily Count Pointer
 5-5      Current Hourly Count Pointer (16-bit number)
-7        Control Register  (8 - 5 Reserved, 4- LEDs, 3-Start / Stop Test, 2-Set Sensitivity, 1-Set Delay)
+7        Control Register  (8 - 5 Reserved, 4- LEDs, 3-Start / Stop Test, 2-Warm Up, 1-LEDs)
 The second word is for storing the current count data
 8-9      Current Hourly Count (16-bit)
 10-11    Current Daily Count (16-bit)

@@ -167,11 +167,11 @@ byte currentDailyPeriod;     // We will keep daily counts as well as period coun
 int countTemp = 0;          // Will use this to see if we should display a day or hours counts
 
 // Variables for the control byte
-// Control Register  (8 - 7 Reserved, 6 - Simblee Reset, 5-Clear Counts, 4-Simblee Sleep, 3-Start / Stop Test, 2-Set Sensitivity, 1-Set Delay)
-byte signalDebounceChange = B00000001;      // These are the bit masks to set and clear the control register bits
-byte clearDebounceChange = B11111110;
-byte signalSentitivityChange = B00000010;
-byte clearSensitivityChange = B11111101;
+// Control Register  (8 - 7 Reserved, 6 - Simblee Reset, 5-Clear Counts, 4-Simblee Sleep, 3-Start / Stop Test, 2-Warmup, 1-LEDs)
+byte turnLedsOn = B00000001;    // Turn on the LEDs
+byte turnLedsOff = B11111110;   // Turn off the LEDs
+byte warmUpFlag = B00000010;    // Tells the Simblee it is warming up
+byte clearWarmUpFlag = B11111101;   // Signals the warmup is complete
 byte toggleStartStop = B00000100;
 byte toggleSimbleeSleep = B00001000;
 byte signalClearCounts = B00010000;
@@ -185,8 +185,7 @@ int controlRegisterDelay = 1000;            // Ho often will we check the contro
 
 
 // PIR Sensor Variables
-unsigned int debounce;               // This is a minimum debounce value - additional debounce set using pot or remote terminal
-
+unsigned long warmUpTime = 1000;           // PIR Sensors need 45-60 seconds to warm up
 
 // Battery monitor
 float stateOfCharge = 0;            // stores battery charge level value
@@ -199,7 +198,6 @@ int menuChoice=0;                   // Menu Selection
 boolean refreshMenu = true;         //  Tells whether to write the menu
 boolean inTest = false;             // Are we in a test or not
 boolean LEDSon = true;              // Are the LEDs on or off
-unsigned int LEDSonTime = 30000;    // By default, turn the LEDS on for 30 seconds - remember only awake time counts not real seconds
 int numberHourlyDataPoints;         // How many hourly counts are there
 int numberDailyDataPoints;          // How many daily counts are there
 const char* releaseNumber = SOFTWARERELEASENUMBER;  // Displays the release on the menu
@@ -228,7 +226,7 @@ void setup()
     enable32Khz(1); // turns on the 32k squarewave - to moderate access to the i2c bus
     
     
-    TakeTheBus(); // Need th i2c bus for initializations
+    TakeTheBus(); // Need the i2c bus for initializations
     if (fram.begin()) {  // you can stick the new i2c addr in here, e.g. begin(0x51);
         Serial.println(F("Found I2C FRAM"));
     } else {
@@ -279,17 +277,21 @@ void setup()
     RTC.alarmInterrupt(ALARM_1, true);
     GiveUpTheBus();
     
-    // Import the Debounce value from memory
-    Serial.print(F("Debounce set to: "));
-    debounce = 2500;
-    FRAMwrite16(DEBOUNCEADDR,debounce);
-    //debounce = FRAMread16(DEBOUNCEADDR);
-    Serial.println(debounce);
-    
     FRAMwrite8(CONTROLREGISTER, toggleStartStop);       // Reset the control register and start the test
     
     Serial.print(F("Free memory: "));
     Serial.println(freeRam());
+    
+    Serial.print("Sensor is warming up...");
+    controlRegisterValue = FRAMread8(CONTROLREGISTER);
+    FRAMwrite8(CONTROLREGISTER, controlRegisterValue | warmUpFlag);  // Turn on the warm up flag
+    while (millis() < warmUpTime);
+    Serial.println("ready to go!");
+    controlRegisterValue = FRAMread8(CONTROLREGISTER);
+    FRAMwrite8(CONTROLREGISTER, controlRegisterValue & clearWarmUpFlag);  // Turn off the warm up flag
+    
+
+    
 }
 
 // Add loop code
@@ -301,8 +303,6 @@ void loop()
         Serial.println(F("0 - Display Menu"));
         Serial.println(F("1 - Display status"));
         Serial.println(F("2 - Set the clock"));
-        Serial.println(F("3 - Change the sensitivitiy"));
-        Serial.println(F("4 - Change the debounce"));
         Serial.println(F("5 - Reset the counter"));
         Serial.println(F("6 - Reset the memory"));
         Serial.println(F("7 - Start / stop counting"));
@@ -340,19 +340,6 @@ void loop()
                 SetTimeDate();
                 PrintTimeDate(t);
                 Serial.println(F("Date and Time Set"));
-                break;
-            case '3':  // Change the sensitivity
-                Serial.println(F("Feature not available at this time"));
-                break;
-            case '4':  // Change the debounce value
-                Serial.println(F("Enter debounce in mSec"));
-                while (Serial.available() == 0) {  // Look for char in serial queue and process if found
-                    continue;
-                }
-                debounce = Serial.parseInt();
-                Serial.print(F("Debounce set to: "));
-                Serial.println(debounce);
-                FRAMwrite16(DEBOUNCEADDR, debounce);
                 break;
             case '5':  // Reset the current counters
                 Serial.println(F("Counter Reset!"));
@@ -434,63 +421,57 @@ void loop()
     }
     if (millis() >= lastCheckedControlRegister + controlRegisterDelay) {
         controlRegisterValue = FRAMread8(CONTROLREGISTER);
-        oldControlRegisterValue = controlRegisterValue;
         lastCheckedControlRegister = millis();
-        if ((controlRegisterValue & toggleStartStop) >> 2 && !inTest)
+        if (controlRegisterValue ^ oldControlRegisterValue) // XOR - will give a positive value if there has been a change
         {
-            StartStopTest(1);  // If the control says start but we are stopped
-        }
-        else if (!((controlRegisterValue & toggleStartStop) >> 2) && inTest)
-        {
-            StartStopTest(0); // If the control bit says stop but we have started
-        }
-        else if (controlRegisterValue & signalDebounceChange)   // If we changed the debounce value on the Simblee side
-        {
-            debounce = FRAMread16(DEBOUNCEADDR);
-            Serial.print(F("Updated debounce value to:"));
-            Serial.println(debounce);
-            controlRegisterValue &= clearDebounceChange;
-            FRAMwrite8(CONTROLREGISTER, controlRegisterValue);
-        }
-        else if (controlRegisterValue & signalSentitivityChange)   // If we changed the debounce value on the Simblee side
-        {
-            controlRegisterValue &= clearSensitivityChange;
-            FRAMwrite8(CONTROLREGISTER, controlRegisterValue);
-        }
-        else if (controlRegisterValue & signalClearCounts)
-        {
-            TakeTheBus();
-            t = RTC.get();
-            GiveUpTheBus();
-            hourlyPersonCount = 0;
-            dailyPersonCount = 0;
-            FRAMwrite16(CURRENTHOURLYCOUNTADDR, hourlyPersonCount);  // Load Hourly Count to memory
-            FRAMwrite16(CURRENTDAILYCOUNTADDR, dailyPersonCount);   // Load Daily Count to memory
-            FRAMwrite32(CURRENTCOUNTSTIME, t);   // Write to FRAM - this is so we know when the last counts were saved
-            Serial.println(F("Current Counts Cleared"));
-            controlRegisterValue &= clearClearCounts;
-            FRAMwrite8(CONTROLREGISTER, controlRegisterValue);
-        }
-        
-        else if (controlRegisterValue & signalSimbleeReset)  // If the reset flag is set
-        {
-            Serial.println("Resetting the Simblee");
-            if (!(controlRegisterValue & toggleSimbleeSleep)) // Only reset if the Simblee is awake
+            oldControlRegisterValue = controlRegisterValue;
+            if ((controlRegisterValue & toggleStartStop) >> 2 && !inTest)
             {
-                pinMode(RESETPIN, OUTPUT);
-                digitalWrite(RESETPIN, LOW);
-                NonBlockingDelay(100);
-                digitalWrite(RESETPIN, HIGH);
-                pinMode(RESETPIN, INPUT);
+                StartStopTest(1);  // If the control says start but we are stopped
             }
-            FRAMwrite8(CONTROLREGISTER, controlRegisterValue & clearSimbleeReset);  // Reset the Simblee Sleep flag
-        }
-        
-        else if (LEDSon && millis() >= LEDSonTime)
-        {
-            digitalWrite(LEDPWR,HIGH);
-            LEDSon = false; // This keeps us from entering this conditional once we have turned off the lights
-            Serial.println(F("Turn off the LEDs"));
+            else if (!((controlRegisterValue & toggleStartStop) >> 2) && inTest)
+            {
+                StartStopTest(0); // If the control bit says stop but we have started
+            }
+            else if (controlRegisterValue & signalClearCounts)
+            {
+                TakeTheBus();
+                t = RTC.get();
+                GiveUpTheBus();
+                hourlyPersonCount = 0;
+                dailyPersonCount = 0;
+                FRAMwrite16(CURRENTHOURLYCOUNTADDR, hourlyPersonCount);  // Load Hourly Count to memory
+                FRAMwrite16(CURRENTDAILYCOUNTADDR, dailyPersonCount);   // Load Daily Count to memory
+                FRAMwrite32(CURRENTCOUNTSTIME, t);   // Write to FRAM - this is so we know when the last counts were saved
+                Serial.println(F("Current Counts Cleared"));
+                controlRegisterValue &= clearClearCounts;
+                FRAMwrite8(CONTROLREGISTER, controlRegisterValue);
+            }
+            else if (controlRegisterValue & signalSimbleeReset)  // If the reset flag is set
+            {
+                Serial.println("Resetting the Simblee");
+                if (!(controlRegisterValue & toggleSimbleeSleep)) // Only reset if the Simblee is awake
+                {
+                    pinMode(RESETPIN, OUTPUT);
+                    digitalWrite(RESETPIN, LOW);
+                    NonBlockingDelay(100);
+                    digitalWrite(RESETPIN, HIGH);
+                    pinMode(RESETPIN, INPUT);
+                }
+                FRAMwrite8(CONTROLREGISTER, controlRegisterValue & clearSimbleeReset);  // Reset the Simblee Sleep flag
+            }
+            else if (!(controlRegisterValue & turnLedsOn))
+            {
+                digitalWrite(LEDPWR,HIGH);
+                LEDSon = false; // This keeps us from entering this conditional once we have turned off the lights
+                Serial.println(F("Turn off the LEDs"));
+            }
+            else if (controlRegisterValue & turnLedsOn)
+            {
+                digitalWrite(LEDPWR,LOW);
+                LEDSon = true; // This keeps us from entering this conditional once we have turned off the lights
+                Serial.println(F("Turn on the LEDs"));
+            }
         }
     }
 }
