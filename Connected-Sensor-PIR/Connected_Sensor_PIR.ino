@@ -73,15 +73,27 @@
 #endif // end IDE
 
 // Set parameters
-// There are some new pin assignments when using the new v10 board
-#define ALARMPIN 3         // This one will be used for the RTC Alarm in v10
+// There are some new pin assignments when using the new v9 board
+#define V9BOARD 1
+#if V9BOARD                    // These are the pin assignments for the v9 board
+#define ALARMPIN 3         // This one will be used for the RTC Alarm in v9
 #define INT2PIN 2         // This is the interrupt pin that registers taps
-#define INTNUMBER 0       // so I don't have to use the lookup function
-#define SENSORPIN 5       // This is a pin which connects to the i2c header - future use
-#define I2CPWR 8          // Turns the i2c port on and off
-#define RESETPIN 16       // This a modification using a bodge wire
-#define TALKPIN 14        // This is the open-drain line for signaling i2c mastery (A0 on the Uno is 14)
+#define INTNUMBER 0         // so I don't have to use the lookup function
+#define SENSORPIN 5            // This is a pin which connects to the i2c header - future use
+#define I2CPWR 8            // Turns the i2c port on and off
+#define RESETPIN 16         // This a modification using a bodge wire
+#define TALKPIN 14           // This is the open-drain line for signaling i2c mastery (A0 on the Uno is 14)
 #define THE32KPIN 15      // This is a 32k squarewave from the DS3231 (A1 on the Uno is 15)
+#else                      // These are the pin assignments for the v8b board
+#define SENSORPIN 2         // Not used now but wired for future use
+#define INT2PIN 3         // This is the interrupt pin that registers taps
+#define INTNUMBER 1
+#define ALARMPIN 5         // This is the pin with the RTC Alarm clock - not used on Arduino side
+#define I2CPWR 8            // Turns the i2c port on and off
+#define RESETPIN 16         // This a modification using a bodge wire
+#define TALKPIN 14           // This is the open-drain line for signaling i2c mastery (A0 on the Uno is 14)
+#define THE32KPIN 15      // This is a 32k squarewave from the DS3231 (A1 on the Uno is 15)
+#endif
 
 //Time Period Definitions - used for debugging
 #define HOURLYPERIOD hour(t)   // Normally hour(t) but can use minute(t) for debugging
