@@ -73,9 +73,9 @@
 #endif // end IDE
 
 // Set parameters
-// There are some new pin assignments when using the new v9 board
-#define V9BOARD 1
-#if V9BOARD                    // These are the pin assignments for the v9 board
+// There are some new pin assignments when using the new v10 board - default for the PIR sensor since we can turn it off
+#define V10BOARD 1
+#if V10BOARD                    // These are the pin assignments for the v9 board
 #define ALARMPIN 3         // This one will be used for the RTC Alarm in v9
 #define INT2PIN 2         // This is the interrupt pin that registers taps
 #define INTNUMBER 0         // so I don't have to use the lookup function
@@ -179,7 +179,7 @@ byte currentDailyPeriod;     // We will keep daily counts as well as period coun
 int countTemp = 0;          // Will use this to see if we should display a day or hours counts
 
 // Variables for the control byte
-// Control Register  (8 - 7 Reserved, 6 - Simblee Reset, 5-Clear Counts, 4-Simblee Sleep, 3-Start / Stop Test, 2-Warmup, 1-LEDs)
+// Control Register  (8 - 7 Reserved, 6 - Simblee Reset, 5-Clear Counts, 4-Simblee Sleep, 3-Start / Stop Test, 2-Warmup, 1-LED state)
 byte turnLedsOn = B00000001;    // Turn on the LEDs
 byte turnLedsOff = B11111110;   // Turn off the LEDs
 byte warmUpFlag = B00000010;    // Tells the Simblee it is warming up
@@ -191,7 +191,7 @@ byte clearClearCounts = B11101111;
 byte signalSimbleeReset = B00100000;        // Simblee will set this flag on disconnect
 byte clearSimbleeReset = B11011111;         // The only thing the Arduino will do is clear the Simblee Reset Bit
 byte controlRegisterValue;                  // Holds the current control register value
-byte oldControlRegisterValue;               // Makes sure we can detect a change in the register value
+byte oldControlRegisterValue = B00000000;   // Makes sure we can detect a change in the register value
 unsigned long lastCheckedControlRegister;   // When did we last check the control register
 int controlRegisterDelay = 1000;            // Ho often will we check the control register
 
@@ -239,12 +239,12 @@ void setup()
     
     
     TakeTheBus(); // Need the i2c bus for initializations
-    if (fram.begin()) {  // you can stick the new i2c addr in here, e.g. begin(0x51);
-        Serial.println(F("Found I2C FRAM"));
-    } else {
-        Serial.println(F("No I2C FRAM found ... check your connections"));
-        BlinkForever();
-    }
+        if (fram.begin()) {  // you can stick the new i2c addr in here, e.g. begin(0x51);
+            Serial.println(F("Found I2C FRAM"));
+        } else {
+            Serial.println(F("No I2C FRAM found ... check your connections"));
+            BlinkForever();
+        }
     GiveUpTheBus(); // Done with i2c initializations Arduino gives up the bus here.
     
     
@@ -269,30 +269,30 @@ void setup()
     
     // Initialize the rest of the i2c devices
     TakeTheBus();
-    batteryMonitor.reset();               // Initialize the battery monitor
-    batteryMonitor.quickStart();
-    setSyncProvider(RTC.get);              // Set up the clock as we will control it and the alarms here
-    Serial.println(F("RTC Sync"));
-    if (timeStatus() != timeSet) {
-        Serial.println(F(" time sync fail!"));
-        BlinkForever();
-    }
-    // We need to set an Alarm or Two in order to ensure that the Simblee is put to sleep at night
-    RTC.squareWave(SQWAVE_NONE);            //Disable the default square wave of the SQW pin.
-    RTC.alarm(ALARM_1);                     // This will clear the Alarm flags
-    RTC.alarm(ALARM_2);                     // This will clear the Alarm flags
-    RTC.setAlarm(ALM1_MATCH_HOURS,00,00,PARKCLOSES,0); // Set the evening Alarm
-    RTC.setAlarm(ALM2_MATCH_HOURS,00,00,PARKOPENS,0); // Set the morning Alarm
-    //RTC.setAlarm(ALM1_MATCH_MINUTES,00,45,00,0); // Start Alarm - for debugging
-    //RTC.setAlarm(ALM2_MATCH_MINUTES,00,47,00,0); // Wake Alarm - for debugging
-    RTC.alarmInterrupt(ALARM_2, true);      // Connect the Interrupt to the Alarms (or not)
-    RTC.alarmInterrupt(ALARM_1, true);
+        batteryMonitor.reset();               // Initialize the battery monitor
+        batteryMonitor.quickStart();
+        setSyncProvider(RTC.get);              // Set up the clock as we will control it and the alarms here
+        Serial.println(F("RTC Sync"));
+        if (timeStatus() != timeSet) {
+            Serial.println(F(" time sync fail!"));
+            BlinkForever();
+        }
+        // We need to set an Alarm or Two in order to ensure that the Simblee is put to sleep at night
+        RTC.squareWave(SQWAVE_NONE);            //Disable the default square wave of the SQW pin.
+        RTC.alarm(ALARM_1);                     // This will clear the Alarm flags
+        RTC.alarm(ALARM_2);                     // This will clear the Alarm flags
+        RTC.setAlarm(ALM1_MATCH_HOURS,00,00,PARKCLOSES,0); // Set the evening Alarm
+        RTC.setAlarm(ALM2_MATCH_HOURS,00,00,PARKOPENS,0); // Set the morning Alarm
+        //RTC.setAlarm(ALM1_MATCH_MINUTES,00,45,00,0); // Start Alarm - for debugging
+        //RTC.setAlarm(ALM2_MATCH_MINUTES,00,47,00,0); // Wake Alarm - for debugging
+        RTC.alarmInterrupt(ALARM_2, true);      // Connect the Interrupt to the Alarms (or not)
+        RTC.alarmInterrupt(ALARM_1, true);
     GiveUpTheBus();
     
     FRAMwrite8(CONTROLREGISTER, toggleStartStop);       // Reset the control register and start the test
     
-    Serial.print(F("Free memory: "));
-    Serial.println(freeRam());
+    controlRegisterValue = FRAMread8(CONTROLREGISTER);
+    FRAMwrite8(CONTROLREGISTER, controlRegisterValue | turnLedsOn); // Turn on the LEDs at startup
     
     Serial.print("Sensor is warming up...");
     controlRegisterValue = FRAMread8(CONTROLREGISTER);
@@ -302,11 +302,10 @@ void setup()
     controlRegisterValue = FRAMread8(CONTROLREGISTER);
     FRAMwrite8(CONTROLREGISTER, controlRegisterValue & clearWarmUpFlag);  // Turn off the warm up flag
     
-
-    
+    Serial.print(F("Free memory: "));
+    Serial.println(freeRam());
 }
 
-// Add loop code
 void loop()
 {
     if (refreshMenu) {
@@ -436,7 +435,7 @@ void loop()
         lastCheckedControlRegister = millis();
         if (controlRegisterValue ^ oldControlRegisterValue) // XOR - will give a positive value if there has been a change
         {
-            oldControlRegisterValue = controlRegisterValue;
+            oldControlRegisterValue = controlRegisterValue;  //   By resetting here - every clause below needs to leave the flag correctly set
             if ((controlRegisterValue & toggleStartStop) >> 2 && !inTest)
             {
                 StartStopTest(1);  // If the control says start but we are stopped
@@ -472,16 +471,16 @@ void loop()
                 }
                 FRAMwrite8(CONTROLREGISTER, controlRegisterValue & clearSimbleeReset);  // Reset the Simblee Sleep flag
             }
-            else if (!(controlRegisterValue & turnLedsOn))
+            else if (!(controlRegisterValue & turnLedsOn) && LEDSon)  // Flag says "off" but lights are on
             {
                 digitalWrite(LEDPWR,HIGH);
                 LEDSon = false; // This keeps us from entering this conditional once we have turned off the lights
                 Serial.println(F("Turn off the LEDs"));
             }
-            else if (controlRegisterValue & turnLedsOn)
+            else if (controlRegisterValue & turnLedsOn && !LEDSon)    // Flag says "on" but lights are off
             {
                 digitalWrite(LEDPWR,LOW);
-                LEDSon = true; // This keeps us from entering this conditional once we have turned off the lights
+                LEDSon = true; // This keeps us from entering this conditional once we have turned on the lights
                 Serial.println(F("Turn on the LEDs"));
             }
         }
