@@ -577,7 +577,7 @@ void LogHourlyEvent() // Log Hourly Event()
     time_t LogTime = FRAMread32(CURRENTCOUNTSTIME);     // This is the last event recorded - this sets the hourly period
     breakTime(LogTime, timeElement);                    // Break the time into its pieces
     unsigned int pointer = (HOURLYOFFSET + FRAMread16(HOURLYPOINTERADDR))*WORDSIZE;  // get the pointer from memory and add the offset
-    LogTime -= 60*timeElement.Minute - timeElement.Second; // So, we need to subtract the minutes and seconds needed to take to the top of the hour
+    LogTime -= (60*timeElement.Minute + timeElement.Second); // So, we need to subtract the minutes and seconds needed to take to the top of the hour
     FRAMwrite32(pointer, LogTime);   // Write to FRAM - this is the end of the period
     FRAMwrite16(pointer+HOURLYCOUNTOFFSET,hourlyPersonCount);
     TakeTheBus();
