@@ -284,10 +284,6 @@ void setup()
         if (ParkOpens > 12) ParkOpens = 12;     // Keep it in bounds
         if (ParkCloses > 23) ParkCloses = 23;   // Keep it in bounds
         else if (ParkCloses < 13) ParkCloses = 13;  // Keep it in bounds
-        Serial.print(F("Park Opens / Closes: "));
-        Serial.print(ParkOpens);
-        Serial.print(F(" / "));
-        Serial.println(ParkCloses);
         RTC.squareWave(SQWAVE_NONE);            //Disable the default square wave of the SQW pin.
         RTC.alarm(ALARM_1);                     // This will clear the Alarm flags
         RTC.alarm(ALARM_2);                     // This will clear the Alarm flags
