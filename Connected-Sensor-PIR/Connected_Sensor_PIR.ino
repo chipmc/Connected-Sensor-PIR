@@ -109,8 +109,8 @@
 #define DAILYCOUNTNUMBER 28    // used in modulo calculations - sets the # of days stored
 #define HOURLYCOUNTNUMBER 4064 // used in modulo calculations - sets the # of hours stored - 256k (4096-14-2)
 #define VERSIONADDR 0x0       // Memory Locations By Name not Number
-#define SENSITIVITYADDR 0x1   // For the 1st Word locations
-#define DEBOUNCEADDR 0x2        // Two bytes for debounce
+#define PARKOPENSADDR 0x1   // When does the park open
+#define PARKCLOSESADDR 0x2        // when does the park close
 #define DAILYPOINTERADDR 0x4    // One byte for daily pointer
 #define HOURLYPOINTERADDR 0x5   // Two bytes for hourly pointer
 #define CONTROLREGISTER 0x7     // This is the control register acted on by both Simblee and Arduino
@@ -129,9 +129,8 @@
 #define YELLOWLED 6       // The yellow LED
 #define LEDPWR 7          // This pin turns on and off the LEDs
 // Finally, here are the variables I want to change often and pull them all together here
-#define SOFTWARERELEASENUMBER "0.1.0"
-#define PARKCLOSES 19
-#define PARKOPENS 7
+#define SOFTWARERELEASENUMBER "0.2.0"
+
 
 
 // Include application, user and local libraries
@@ -172,6 +171,8 @@ void toArduinoTime(time_t unixT); //Converts to Arduino Time for use with the RT
 time_t t;
 byte lastHour = 0;  // For recording the startup values
 byte lastDate = 0;   // These values make sure we record events if time has lapsed
+byte ParkOpens;             // When does the park open
+byte ParkCloses;            // When does the park close
 unsigned int hourlyPersonCount = 0;  // hourly counter
 unsigned int dailyPersonCount = 0;   //  daily counter
 byte currentHourlyPeriod;    // This is where we will know if the period changed
@@ -268,6 +269,8 @@ void setup()
     }
     
     // Initialize the rest of the i2c devices
+    ParkOpens = FRAMread8(PARKOPENSADDR);   // Get the Opening Time
+    ParkCloses = FRAMread8(PARKCLOSESADDR); // Get the Park closing time
     TakeTheBus();
         batteryMonitor.reset();               // Initialize the battery monitor
         batteryMonitor.quickStart();
@@ -278,13 +281,18 @@ void setup()
             BlinkForever();
         }
         // We need to set an Alarm or Two in order to ensure that the Simblee is put to sleep at night
+        if (ParkOpens > 12) ParkOpens = 12;     // Keep it in bounds
+        if (ParkCloses > 23) ParkCloses = 23;   // Keep it in bounds
+        else if (ParkCloses < 13) ParkCloses = 13;  // Keep it in bounds
+        Serial.print(F("Park Opens / Closes: "));
+        Serial.print(ParkOpens);
+        Serial.print(F(" / "));
+        Serial.println(ParkCloses);
         RTC.squareWave(SQWAVE_NONE);            //Disable the default square wave of the SQW pin.
         RTC.alarm(ALARM_1);                     // This will clear the Alarm flags
         RTC.alarm(ALARM_2);                     // This will clear the Alarm flags
-        RTC.setAlarm(ALM1_MATCH_HOURS,00,00,PARKCLOSES,0); // Set the evening Alarm
-        RTC.setAlarm(ALM2_MATCH_HOURS,00,00,PARKOPENS,0); // Set the morning Alarm
-        //RTC.setAlarm(ALM1_MATCH_MINUTES,00,45,00,0); // Start Alarm - for debugging
-        //RTC.setAlarm(ALM2_MATCH_MINUTES,00,47,00,0); // Wake Alarm - for debugging
+        RTC.setAlarm(ALM1_MATCH_HOURS,00,00,ParkCloses,0); // Set the evening Alarm
+        RTC.setAlarm(ALM2_MATCH_HOURS,00,00,ParkOpens,0); // Set the morning Alarm
         RTC.alarmInterrupt(ALARM_2, true);      // Connect the Interrupt to the Alarms (or not)
         RTC.alarmInterrupt(ALARM_1, true);
     GiveUpTheBus();
@@ -314,6 +322,8 @@ void loop()
         Serial.println(F("0 - Display Menu"));
         Serial.println(F("1 - Display status"));
         Serial.println(F("2 - Set the clock"));
+        Serial.println(F("3 - Set the Park Open Hour (24 hr format)"));
+        Serial.println(F("4 - Set the Park Close Hour"));
         Serial.println(F("5 - Reset the counter"));
         Serial.println(F("6 - Reset the memory"));
         Serial.println(F("7 - Start / stop counting"));
@@ -338,8 +348,10 @@ void loop()
                 Serial.print(F("State of charge: "));
                 Serial.print(stateOfCharge);
                 Serial.println(F("%"));
-                Serial.print(F("Debounce set to: "));
-                Serial.println(FRAMread16(DEBOUNCEADDR));
+                Serial.print(F("Park Opens at: "));
+                Serial.println(FRAMread8(PARKOPENSADDR));
+                Serial.print(F("Park Closes at: "));
+                Serial.println(FRAMread8(PARKCLOSESADDR));
                 Serial.print(F("Hourly count: "));
                 Serial.println(FRAMread16(CURRENTHOURLYCOUNTADDR));
                 Serial.print(F("Daily count: "));
@@ -351,6 +363,28 @@ void loop()
                 SetTimeDate();
                 PrintTimeDate(t);
                 Serial.println(F("Date and Time Set"));
+                break;
+            case '3':   // Set Park Open Time
+                Serial.println(F("Enter hour park opens (0-24):"));
+                while (Serial.available() == 0) {  // Look for char in serial queue and process if found
+                    continue;
+                }
+                ParkOpens = Serial.parseInt();
+                FRAMwrite8(PARKOPENSADDR,ParkOpens);
+                Serial.print(F("Park Open Time Set to: "));
+                Serial.println(ParkOpens);
+                RTC.setAlarm(ALM2_MATCH_HOURS,00,00,ParkOpens,0); // Set the morning Alarm
+                break;
+            case '4':   // Set Park Close Time
+                Serial.println(F("Enter hour park closes (0-24):"));
+                while (Serial.available() == 0) {  // Look for char in serial queue and process if found
+                    continue;
+                }
+                ParkCloses = Serial.parseInt();
+                FRAMwrite8(PARKCLOSESADDR,ParkCloses);
+                Serial.print(F("Park Close Time Set to: "));
+                Serial.println(ParkCloses);
+                RTC.setAlarm(ALM1_MATCH_HOURS,00,00,ParkCloses,0); // Set the evening Alarm
                 break;
             case '5':  // Reset the current counters
                 Serial.println(F("Counter Reset!"));
