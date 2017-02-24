@@ -129,7 +129,7 @@
 #define YELLOWLED 6       // The yellow LED
 #define LEDPWR 7          // This pin turns on and off the LEDs
 // Finally, here are the variables I want to change often and pull them all together here
-#define SOFTWARERELEASENUMBER "0.2.0"
+#define SOFTWARERELEASENUMBER "0.2.1"
 
 
 
