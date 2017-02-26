@@ -79,15 +79,14 @@
 #define ALARMPIN 3         // This one will be used for the RTC Alarm in v9
 #define INT2PIN 2         // This is the interrupt pin that registers taps
 #define INTNUMBER 0         // so I don't have to use the lookup function
-#define SENSORPIN 5            // This is a pin which connects to the i2c header - future use
+#define PIRPIN 5            // This is a pin which connects to the i2c header - future use
 #define I2CPWR 8            // Turns the i2c port on and off
 #define RESETPIN 16         // This a modification using a bodge wire
 #define TALKPIN 14           // This is the open-drain line for signaling i2c mastery (A0 on the Uno is 14)
 #define THE32KPIN 15      // This is a 32k squarewave from the DS3231 (A1 on the Uno is 15)
 #else                      // These are the pin assignments for the v8b board
 #define SENSORPIN 2         // Not used now but wired for future use
-#define INT2PIN 3         // This is the interrupt pin that registers taps
-#define INTNUMBER 1
+#define PIRPIN 3         // This is the interrupt pin for the PIR Sensor, Active High, Push-Pull
 #define ALARMPIN 5         // This is the pin with the RTC Alarm clock - not used on Arduino side
 #define I2CPWR 8            // Turns the i2c port on and off
 #define RESETPIN 16         // This a modification using a bodge wire
@@ -125,16 +124,17 @@
 #define HOURLYCOUNTOFFSET 4         // Offsets for the values in the hourly words
 #define HOURLYBATTOFFSET 6
 // LED Pin Value Variables
-#define REDLED 4          // led connected to digital pin 4
-#define YELLOWLED 6       // The yellow LED
+#define REDLED 6          // led connected to digital pin 4
+#define YELLOWLED 4       // The yellow LED
 #define LEDPWR 7          // This pin turns on and off the LEDs
 // Finally, here are the variables I want to change often and pull them all together here
-#define SOFTWARERELEASENUMBER "0.2.1"
+#define SOFTWARERELEASENUMBER "0.2.2"
 
 
 
 // Include application, user and local libraries
 #include <avr/sleep.h>          // For Sleep Code
+#include <avr/power.h>    // Power management
 #include "MAX17043.h"           // Drives the LiPo Fuel Gauge
 #include <Wire.h>               //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
 #include <TimeLib.h>
@@ -155,7 +155,8 @@ void enable32Khz(uint8_t enable);  // Need to turn on the 32k square wave for bu
 void LogHourlyEvent(); // Log Hourly Event()
 void LogDailyEvent(); // Log Daily Event()
 void CheckForBump(); // Check for bump
-void pinChangeISR();      // Thie is the Interrrupt Service Routine for the pin change interrupt
+void SetPinChangeInterrupt(byte Pin);  // Here is where we set the pinchange interrupy
+//void ISR (PCINT2_vect)     // Thie is the Interrrupt Service Routine for the pin change interrupt
 void sleepNow();  // Puts the Arduino to Sleep
 void NonBlockingDelay(int millisDelay);  // Used for a non-blocking delay
 int freeRam ();  // Debugging code, to check usage of RAM
@@ -205,12 +206,13 @@ float stateOfCharge = 0;            // stores battery charge level value
 
 //Menu and Program Variables
 unsigned long lastBump = 0;         // set the time of an event
-boolean ledState = LOW;                 // variable used to store the last LED status, to toggle the light
-int delaySleep = 3000;               // Wait until going back to sleep so we can enter commands
+bool ledState = false;                 // variable used to store the last LED status, to toggle the light
+volatile bool PIRInt = false;           // A flag for the PIR Interrupt
+bool refreshMenu = true;         //  Tells whether to write the menu
+bool inTest = false;             // Are we in a test or not
+bool LEDSon = true;              // Are the LEDs on or off
+int delaySleep = 3500;               // Wait until going back to sleep so we can enter commands
 int menuChoice=0;                   // Menu Selection
-boolean refreshMenu = true;         //  Tells whether to write the menu
-boolean inTest = false;             // Are we in a test or not
-boolean LEDSon = true;              // Are the LEDs on or off
 int numberHourlyDataPoints;         // How many hourly counts are there
 int numberDailyDataPoints;          // How many daily counts are there
 const char* releaseNumber = SOFTWARERELEASENUMBER;  // Displays the release on the menu
@@ -231,7 +233,7 @@ void setup()
     pinModeFast(I2CPWR, OUTPUT);            // This is for V10 boards which can turn off power to the external i2c header
     digitalWriteFast(I2CPWR, HIGH);         // Turns on the i2c port
     pinModeFast(RESETPIN,INPUT);            // Just to make sure - if set to output, you can program the SIMBLEE
-    pinModeFast(INT2PIN, INPUT);            // Set up the interrupt pins, they're set as active low with an external pull-up
+    pinModeFast(PIRPIN, INPUT);            // Set up the interrupt pins, they're set as active low with an external pull-up
     pinModeFast(THE32KPIN,INPUT);           // These are the pins tha are used to negotiate for the i2c bus
     pinModeFast(TALKPIN,INPUT);             // These are the pins tha are used to negotiate for the i2c bus
     
@@ -308,6 +310,8 @@ void setup()
     
     Serial.print(F("Free memory: "));
     Serial.println(freeRam());
+    
+    SetPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
 }
 
 void loop()
@@ -454,12 +458,6 @@ void loop()
         }
         Serial.read();  // Clear the serial buffer
     }
-    if (inTest == 1) {
-        CheckForBump();
-        if (millis() >= lastBump + delaySleep) {
-            sleepNow();     // sleep function called here
-        }
-    }
     if (millis() >= lastCheckedControlRegister + controlRegisterDelay) {
         controlRegisterValue = FRAMread8(CONTROLREGISTER);
         lastCheckedControlRegister = millis();
@@ -515,51 +513,45 @@ void loop()
             }
         }
     }
+    if (PIRInt)
+    {
+        CheckForBump();
+    }
+    if (millis() >= lastBump + delaySleep) {
+        sleepNow();     // sleep function called here
+    }
 }
-
 
 void CheckForBump() // This is where we check to see if an interrupt is set when not asleep or act on a tap that woke the Arduino
 {
-    if (!digitalReadFast(INT2PIN))    // If int2 goes LOW, either p/l has changed or there's been a single/double tap
-    {
-        lastBump = millis();    // Reset last bump timer
-        if (!ledState)  // We ignore debounced taps
-        {
-            Serial.println("Detected");
-            lastBump = millis();    // Reset last bump timer
-            ledState = true;
-            digitalWrite(REDLED,ledState);
-            TakeTheBus();
-                t = RTC.get();
-            GiveUpTheBus();
-            if (t == 0) return;     // This means there was an error in reading the real time clock - very rare in testing so will simply throw out this count
-            if (HOURLYPERIOD != currentHourlyPeriod) {
-                LogHourlyEvent();
-            }
-            if (DAILYPERIOD != currentDailyPeriod) {
-                LogDailyEvent();
-            }
-            hourlyPersonCount++;                    // Increment the PersonCount
-            FRAMwrite16(CURRENTHOURLYCOUNTADDR, hourlyPersonCount);  // Load Hourly Count to memory
-            dailyPersonCount++;                    // Increment the PersonCount
-            FRAMwrite16(CURRENTDAILYCOUNTADDR, dailyPersonCount);   // Load Daily Count to memory
-            FRAMwrite32(CURRENTCOUNTSTIME, t);   // Write to FRAM - this is so we know when the last counts were saved
-            Serial.print(F("Hourly: "));
-            Serial.print(hourlyPersonCount);
-            Serial.print(F(" Daily: "));
-            Serial.print(dailyPersonCount);
-            Serial.print(F("  Time: "));
-            PrintTimeDate(t);
-            Serial.println("");
-        }
+    lastBump = millis();    // Reset last bump timer
+    Serial.print("Detected: ");
+    ledState = !ledState;
+    digitalWrite(REDLED,ledState);
+    PIRInt = false; // Reset the flag
+    TakeTheBus();
+        t = RTC.get();
+    GiveUpTheBus();
+    if (t == 0) return;     // This means there was an error in reading the real time clock - very rare in testing so will simply throw out this count
+    if (HOURLYPERIOD != currentHourlyPeriod) {
+        LogHourlyEvent();
     }
-    else if (ledState)
-    {
-        ledState = false;
-        digitalWrite(REDLED,ledState);
+    if (DAILYPERIOD != currentDailyPeriod) {
+        LogDailyEvent();
     }
+    hourlyPersonCount++;                    // Increment the PersonCount
+    FRAMwrite16(CURRENTHOURLYCOUNTADDR, hourlyPersonCount);  // Load Hourly Count to memory
+    dailyPersonCount++;                    // Increment the PersonCount
+    FRAMwrite16(CURRENTDAILYCOUNTADDR, dailyPersonCount);   // Load Daily Count to memory
+    FRAMwrite32(CURRENTCOUNTSTIME, t);   // Write to FRAM - this is so we know when the last counts were saved
+    Serial.print(F("Hourly: "));
+    Serial.print(hourlyPersonCount);
+    Serial.print(F(" Daily: "));
+    Serial.print(dailyPersonCount);
+    Serial.print(F("  Time: "));
+    PrintTimeDate(t);
+    Serial.println("");
 }
-
 
 void StartStopTest(boolean startTest)  // Since the test can be started from the serial menu or the Simblee - created a function
 {
@@ -621,7 +613,6 @@ void LogHourlyEvent() // Log Hourly Event()
     Serial.println(F("Hourly Event Logged"));
 }
 
-
 void LogDailyEvent() // Log Daily Event()
 {
     tmElements_t timeElement;
@@ -641,7 +632,6 @@ void LogDailyEvent() // Log Daily Event()
     currentDailyPeriod = DAILYPERIOD;  // Change the time period
     Serial.println(F("Logged a Daily Event"));
 }
-
 
 void SetTimeDate()  // Function to set the date and time from the terminal window
 {
@@ -701,31 +691,41 @@ void PrintTimeDate(time_t t)  // Prints time and date to the console
     Serial.println();
 }
 
+void SetPinChangeInterrupt(byte Pin)  // Here is where we set the pinchange interrupy
+{
+    *digitalPinToPCMSK(Pin) |= bit (digitalPinToPCMSKbit(Pin));  // enable pin
+    PCIFR  |= bit (digitalPinToPCICRbit(Pin)); // clear any outstanding interrupt
+    PCICR  |= bit (digitalPinToPCICRbit(Pin)); // enable interrupt for the group
+}
 
-
-void pinChangeISR()        // Sensor Interrupt Handler
+ISR (PCINT2_vect)   // interrupt service routine in sleep mode for PIR PinChange Interrupt (D0-D7)
 {
     // execute code here after wake-up before returning to the loop() function
     // timers and code using timers (serial.print and more...) will not work here.
     // we don't really need to execute any special functions here, since we
     // just want the thing to wake up
     sleep_disable();         // first thing after waking from sleep is to disable sleep...
-    detachInterrupt(INTNUMBER);      // disables interrupt
+    if (inTest == 1 && digitalReadFast(PIRPIN)) {       // remember this is a pin change - want to make sure it is HIGH
+        PIRInt = true;  //
+    }
 }
 
-
-void sleepNow()         // here we put the arduino to sleep
+void sleepNow()
 {
     // Here is a great tutorial on interrupts and sleep: http://www.gammon.com.au/interrupts
     Serial.print(F("Entering Sleep mode..."));
-    Serial.flush();
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
+    Serial.flush ();  // wait for Serial to finish outputting
+    Serial.end ();    // shut down Serial
     noInterrupts ();          // make sure we don't get interrupted before we sleep
-    sleep_enable();          // enables the sleep bit in the mcucr register
-    attachInterrupt(INTNUMBER,pinChangeISR, LOW); // use interrupt and run function
+    set_sleep_mode (SLEEP_MODE_PWR_DOWN);
+    sleep_enable ();          // enables the sleep bit in the mcucr register
+    ADCSRA = 0;            // turn off ADC
+    power_all_disable ();  // power off ADC, Timer 0 and 1, serial interface
     interrupts ();           // interrupts allowed now, next instruction WILL be executed
-    sleep_cpu();            // here the device is actually put to sleep!!
-    // THE PROGRAM CONTINUES FROM HERE AFTER WAKING UP
+    sleep_cpu ();            // here the device is put to sleep
+    sleep_disable ();         // first thing after waking from sleep:
+    power_all_enable ();   // power everything back on
+    Serial.begin(9600);   // Restart Serial
     Serial.println("Waking up");
 }
 
@@ -747,7 +747,6 @@ void toArduinoTime(time_t unixT) // Puts time in format for reporting
     if(timeElement.Second < 10) Serial.print(F("0"));
     Serial.print(timeElement.Second);
 }
-
 
 void BlinkForever() // When something goes badly wrong...
 {
