@@ -128,18 +128,18 @@
 #define YELLOWLED 4       // The yellow LED
 #define LEDPWR 7          // This pin turns on and off the LEDs
 // Finally, here are the variables I want to change often and pull them all together here
-#define SOFTWARERELEASENUMBER "0.2.2"
+#define SOFTWARERELEASENUMBER "0.2.3"
 
 
 
 // Include application, user and local libraries
 #include <avr/sleep.h>          // For Sleep Code
-#include <avr/power.h>    // Power management
+#include <avr/power.h>          // Power management
+#include <avr/wdt.h>            // Watchdog Timer
 #include "MAX17043.h"           // Drives the LiPo Fuel Gauge
 #include <Wire.h>               //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
-#include <TimeLib.h>
+#include <TimeLib.h>            //http://www.arduino.cc/playground/Code/Time
 #include "DS3232RTC.h"          //http://github.com/JChristensen/DS3232RTC
-#include "Time.h"               //http://www.arduino.cc/playground/Code/Time
 #include "Adafruit_FRAM_I2C.h"  // Library for FRAM functions
 #include "digitalWriteFast.h"   // Try to cut down on overhead for timing sensitive IO - https://github.com/NicksonYap/digitalWriteFast
 #include "FRAMcommon.h"         // Where I put all the common FRAM read and write extensions
@@ -155,8 +155,8 @@ void enable32Khz(uint8_t enable);  // Need to turn on the 32k square wave for bu
 void LogHourlyEvent(); // Log Hourly Event()
 void LogDailyEvent(); // Log Daily Event()
 void CheckForBump(); // Check for bump
-void SetPinChangeInterrupt(byte Pin);  // Here is where we set the pinchange interrupy
-//void ISR (PCINT2_vect)     // Thie is the Interrrupt Service Routine for the pin change interrupt
+void SetPinChangeInterrupt(byte Pin);  // Here is where we set the pinchange interrupt
+void ClearPinChangeInterrupt(byte Pin);  // Here is where we clear the pinchange interrupt
 void sleepNow();  // Puts the Arduino to Sleep
 void NonBlockingDelay(int millisDelay);  // Used for a non-blocking delay
 int freeRam ();  // Debugging code, to check usage of RAM
@@ -221,6 +221,9 @@ const char* releaseNumber = SOFTWARERELEASENUMBER;  // Displays the release on t
 // Add setup code
 void setup()
 {
+//    wdt_disable();                          // Don't get caught in reset loop
+    wdt_reset();
+    wdt_disable();
     Wire.begin();
     Serial.begin(9600);                     // Initialize communications with the terminal
     Serial.println("");                     // Header information
@@ -312,6 +315,7 @@ void setup()
     Serial.println(freeRam());
     
     SetPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
+    
 }
 
 void loop()
@@ -525,32 +529,42 @@ void loop()
 void CheckForBump() // This is where we check to see if an interrupt is set when not asleep or act on a tap that woke the Arduino
 {
     lastBump = millis();    // Reset last bump timer
-    Serial.print("Detected: ");
+    Serial.print("Detected");
     ledState = !ledState;
     digitalWrite(REDLED,ledState);
     PIRInt = false; // Reset the flag
     TakeTheBus();
+        ClearPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
         t = RTC.get();
+        SetPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
+        Serial.print(".");
     GiveUpTheBus();
+    Serial.print(".");
     if (t == 0) return;     // This means there was an error in reading the real time clock - very rare in testing so will simply throw out this count
     if (HOURLYPERIOD != currentHourlyPeriod) {
         LogHourlyEvent();
     }
+    Serial.print(".");
     if (DAILYPERIOD != currentDailyPeriod) {
         LogDailyEvent();
     }
+    Serial.print(".");
     hourlyPersonCount++;                    // Increment the PersonCount
     FRAMwrite16(CURRENTHOURLYCOUNTADDR, hourlyPersonCount);  // Load Hourly Count to memory
+    Serial.print(".");
     dailyPersonCount++;                    // Increment the PersonCount
     FRAMwrite16(CURRENTDAILYCOUNTADDR, dailyPersonCount);   // Load Daily Count to memory
+    Serial.print(".");
     FRAMwrite32(CURRENTCOUNTSTIME, t);   // Write to FRAM - this is so we know when the last counts were saved
+    Serial.print(".");
     Serial.print(F("Hourly: "));
     Serial.print(hourlyPersonCount);
     Serial.print(F(" Daily: "));
     Serial.print(dailyPersonCount);
+    Serial.print(F(" Millis: "));
+    Serial.print(millis());
     Serial.print(F("  Time: "));
     PrintTimeDate(t);
-    Serial.println("");
 }
 
 void StartStopTest(boolean startTest)  // Since the test can be started from the serial menu or the Simblee - created a function
@@ -691,11 +705,18 @@ void PrintTimeDate(time_t t)  // Prints time and date to the console
     Serial.println();
 }
 
-void SetPinChangeInterrupt(byte Pin)  // Here is where we set the pinchange interrupy
+void SetPinChangeInterrupt(byte Pin)  // Here is where we set the pinchange interrupt
 {
     *digitalPinToPCMSK(Pin) |= bit (digitalPinToPCMSKbit(Pin));  // enable pin
     PCIFR  |= bit (digitalPinToPCICRbit(Pin)); // clear any outstanding interrupt
     PCICR  |= bit (digitalPinToPCICRbit(Pin)); // enable interrupt for the group
+}
+
+void ClearPinChangeInterrupt(byte Pin)  // Here is where we clear the pinchange interrupt
+{
+    *digitalPinToPCMSK(Pin) &= bit (digitalPinToPCMSKbit(Pin));  // disable pin
+    PCIFR  != bit (digitalPinToPCICRbit(Pin)); // clear any outstanding interrupt
+    PCICR  &= bit (digitalPinToPCICRbit(Pin)); // disnable interrupt for the group
 }
 
 ISR (PCINT2_vect)   // interrupt service routine in sleep mode for PIR PinChange Interrupt (D0-D7)
@@ -709,6 +730,12 @@ ISR (PCINT2_vect)   // interrupt service routine in sleep mode for PIR PinChange
         PIRInt = true;  //
     }
 }
+
+ISR (WDT_vect)      // interupt service routine for the watchdog timer
+{
+    // Could do something here
+}  // end of WDT_vect
+
 
 void sleepNow()
 {

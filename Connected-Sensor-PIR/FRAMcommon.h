@@ -146,6 +146,8 @@ void ResetFRAM()  // This will reset the FRAM - set the version and preserve del
 boolean TakeTheBus()
 {
     //Serial.print(F(Asking for the bus..."));
+    wdt_reset();            // Reset before we set the timer.
+    wdt_enable(WDTO_1S);    // Gives this set of actions 1 second to complete
     if (clockHighorLow) {
         while(digitalReadFast(THE32KPIN)) {} // The Simblee will only read the Talk line when SQW pin goes low
     }
@@ -165,6 +167,7 @@ boolean GiveUpTheBus()
     digitalWriteFast(TALKPIN,HIGH); // Not sure if this is needed - still for completeness.
     pinModeFast(TALKPIN,INPUT_PULLUP);  // Start listening again
     //Serial.println("Simblee: We gave up the Bus");
+    wdt_disable();      // Turn off the watchdog
     return 1;
 }
 

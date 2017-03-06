@@ -12,6 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		81101E351E6CC2010079578C /* Arduino Uno (Minicore).xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = "Arduino Uno (Minicore).xcconfig"; path = "Configurations/Arduino Uno (Minicore).xcconfig"; sourceTree = "<group>"; };
 		818540741DD2B3BF00D8D384 /* Index */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Index; sourceTree = BUILT_PRODUCTS_DIR; };
 		818540771DD2B3BF00D8D384 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		818540791DD2B3BF00D8D384 /* Makefile */ = {isa = PBXFileReference; explicitFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
@@ -270,6 +271,7 @@
 				8185407F1DD2B3BF00D8D384 /* 4D Systems PICadillo 35T.xcconfig */,
 				818540801DD2B3BF00D8D384 /* Adafruit ATmega32U4 (USBtinyISP).xcconfig */,
 				818540811DD2B3BF00D8D384 /* Adafruit Feather M0.xcconfig */,
+				81101E351E6CC2010079578C /* Arduino Uno (Minicore).xcconfig */,
 				818540821DD2B3BF00D8D384 /* Adafruit Feather M0 (J-Link).xcconfig */,
 				818540831DD2B3BF00D8D384 /* Adafruit Feather 32u4.xcconfig */,
 				818540841DD2B3BF00D8D384 /* Adafruit Pro Trinket 3V-12MHz.xcconfig */,
