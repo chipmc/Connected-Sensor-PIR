@@ -136,6 +136,7 @@
 #include <avr/sleep.h>          // For Sleep Code
 #include <avr/power.h>          // Power management
 #include <avr/wdt.h>            // Watchdog Timer
+#include <EEPROM.h>
 #include "MAX17043.h"           // Drives the LiPo Fuel Gauge
 #include <Wire.h>               //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
 #include <TimeLib.h>            //http://www.arduino.cc/playground/Code/Time
@@ -216,13 +217,18 @@ int menuChoice=0;                   // Menu Selection
 int numberHourlyDataPoints;         // How many hourly counts are there
 int numberDailyDataPoints;          // How many daily counts are there
 const char* releaseNumber = SOFTWARERELEASENUMBER;  // Displays the release on the menu
+byte bootcount = 0;         // Counts reboots
+int bootCountAddr = 0;      // Address for Boot Count Number
 
 
 // Add setup code
 void setup()
 {
     wdt_reset();                            // Don't get caught in reset loop
-    wdt_disable();
+    wdt_disable();                          // In case reset from WDT - will still be enabled
+    bootcount = EEPROM.read(bootCountAddr); // Here is where we will track reboots by month
+    bootcount++;
+    EEPROM.write(bootCountAddr, bootcount);
     Wire.begin();
     Serial.begin(9600);                     // Initialize communications with the terminal
     Serial.println("");                     // Header information
@@ -560,8 +566,8 @@ void CheckForBump() // This is where we check to see if an interrupt is set when
     Serial.print(hourlyPersonCount);
     Serial.print(F(" Daily: "));
     Serial.print(dailyPersonCount);
-    Serial.print(F(" Millis: "));
-    Serial.print(millis());
+    Serial.print(F(" Reboots: "));
+    Serial.print(bootcount);
     Serial.print(F("  Time: "));
     PrintTimeDate(t);
 }
