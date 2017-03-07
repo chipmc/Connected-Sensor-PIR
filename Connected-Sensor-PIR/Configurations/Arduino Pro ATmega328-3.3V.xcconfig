@@ -51,5 +51,6 @@ AVRDUDE_BAUDRATE = 38400
 // ----------------------------------
 // Only set values for parameters different from default, otherwise comment
 //
-AVRDUDE_CONF = $(HOME)/Library/Arduino15/packages/MiniCore/hardware/avr/1.0.3/avrdude.conf
+BOOTLOADER = minicore
+//AVRDUDE_CONF = $(HOME)/Library/Arduino15/packages/MiniCore/hardware/avr/1.0.3/avrdude.conf
 

@@ -221,8 +221,7 @@ const char* releaseNumber = SOFTWARERELEASENUMBER;  // Displays the release on t
 // Add setup code
 void setup()
 {
-//    wdt_disable();                          // Don't get caught in reset loop
-    wdt_reset();
+    wdt_reset();                            // Don't get caught in reset loop
     wdt_disable();
     Wire.begin();
     Serial.begin(9600);                     // Initialize communications with the terminal
@@ -315,12 +314,12 @@ void setup()
     Serial.println(freeRam());
     
     SetPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
-    
 }
 
 void loop()
 {
-    if (refreshMenu) {
+    if (refreshMenu)
+    {
         refreshMenu = 0;
         Serial.println(F("Remote Trail Counter Program Menu"));
         Serial.println(F("0 - Display Menu"));
@@ -521,7 +520,7 @@ void loop()
     {
         CheckForBump();
     }
-    if (millis() >= lastBump + delaySleep) {
+    if (inTest && millis() >= lastBump + delaySleep) {
         sleepNow();     // sleep function called here
     }
 }

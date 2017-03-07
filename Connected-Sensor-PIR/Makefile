@@ -7,7 +7,8 @@
 # All rights reserved
 # http://embedxcode.weebly.com
 #
-# Last update: Sep 28, 2016 release 5.2.8
+# Last update: Mar 06, 2017 release 7.2.0
+# Updated from 6.0.9 on 20Mar 07, 2017 08:58:37
 
 
 # Libraries
@@ -23,6 +24,11 @@
 #
 # ARDUINO : AVR = EEPROM HID SoftwareSerial SPI Wire 
 # ARDUINO = Bridge Esplora Ethernet Firmata GSM 
+#	LiquidCrystal Robot_Control Robot_Motor RobotIRremote SD Servo 
+#	SpacebrewYun Stepper Temboo TFT WiFi 
+#
+# ARDUINO : AVR = EEPROM HID SoftwareSerial SPI Wire 
+# ARDUINO : common = Bridge Esplora Ethernet Firmata GSM 
 #	LiquidCrystal Robot_Control Robot_Motor RobotIRremote SD Servo 
 #	SpacebrewYun Stepper Temboo TFT WiFi 
 #
@@ -43,6 +49,19 @@ APP_LIBS_LIST = Wire
 #	RunningAverage SdFat Servo SFE_CC3000 SFE_MicroOLED SoftI2CMaster 
 #	SpacebrewYun SPIFlash Temboo Time TimeLib Timezone TinyWireM Twitter 
 #	U8glib Ubidots 
+#
+# USER = Adafruit_ADS1X15 Adafruit_AM2315 Adafruit_BLE_UART 
+#	Adafruit_BLEFirmata Adafruit_BluefruitLE_nRF51 Adafruit_CC3000 
+#	Adafruit_DotStar Adafruit_FONA Adafruit_FONA_OLD Adafruit_FONA_Teensy 
+#	Adafruit_FRAM_I2C Adafruit_GFX_Library Adafruit_GPS Adafruit_INA219 
+#	Adafruit_MAX31855 Adafruit_NeoPixel Adafruit_SSD1306 APA102 
+#	arduino_865227 Bounce2 Bridge DHT DS1307RTC DS3232RTC DS3234 DSRTCLib 
+#	EnableInterrupt FastLED Firmata fxos8700cq GPS HIH61XX HIH61XXCommander 
+#	i2c_t3 Keyboard Keypad LGPRS LSM303 MAX17043 MicroView Mouse 
+#	MQTT MQTTClient NewPing Phant PubSubClient RadioHead RFM69 
+#	Robot_Control RTClib RunningAverage SdFat Servo SFE_CC3000 
+#	SFE_MicroOLED SoftI2CMaster SpacebrewYun SPIFlash Temboo Time TimeLib 
+#	Timezone TinyWireM Twitter U8glib Ubidots 
 #
 USER_LIBS_LIST = MAX17043 Adafruit_FRAM_I2C TimeLib DS3232RTC
 
@@ -146,20 +165,42 @@ BOARD_PORT = /dev/cu.usbserial*
 #OPTIMISATION    = -Os -g3
 
 
+
 # Miscellaneous
 # ----------------------------------
-# Manage path with space in the name
 #
-CURRENT_DIR   := $(shell pwd)
-CURRENT_DIR   := $(shell echo '$(CURRENT_DIR)' | sed 's/ /\\\ /g')
+EMBEDXCODE_EDITION      = embedXcode+ for Wiring / Arduino
+
+# Manage path with space in the name
+CURRENT_DIR_SPACE := $(shell pwd)
+CURRENT_DIR       := $(shell echo '$(CURRENT_DIR_SPACE)' | sed 's/ /\\\ /g')
 
 # C-compliant project name
-#
 PROJECT_NAME_AS_IDENTIFIER = Connected_Sensor_PIR
 SKETCH_EXTENSION = ino
 
-MAKEFILE_PATH  = $(CURRENT_DIR)/Makefiles
-UTILITIES_PATH = $(CURRENT_DIR)/Utilities
+# Include only current variant of selected platform
+SELECTED_RESOURCES = true
+
+# For distribution, keep main cpp, false or true
+KEEP_MAIN_CPP = false
+
+# Local makefiles
+#MAKEFILE_PATH     := $(CURRENT_DIR)/Makefiles
+#UTILITIES_PATH    := $(CURRENT_DIR)/Utilities
+
+# Remote makefiles
+EMBEDXCODE_PATH    = $(HOME)/Library/embedXcode/Tools
+MAKEFILE_PATH      = $(EMBEDXCODE_PATH)/Makefiles
+UTILITIES_PATH     = $(EMBEDXCODE_PATH)/Utilities
+
+# Local builds
+#BUILDS_PATH_SPACE := $(CURRENT_DIR_SPACE)/Builds
+#BUILDS_PATH       := $(CURRENT_DIR)/Builds
+
+# Remote builds
+BUILDS_PATH       := $(BUILT_PRODUCTS_DIR)
+BUILDS_PATH_SPACE := $(BUILDS_PATH)
 
 include $(MAKEFILE_PATH)/Step1.mk
 
