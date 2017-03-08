@@ -11,7 +11,7 @@
 # Updated from 6.0.9 on 20Mar 07, 2017 08:58:37
 
 
-# Libraries
+# Libraries 
 # ----------------------------------
 # Declare application Arduino/chipKIT/Digispark/Energia/Maple/Microduino/Teensy/Wiring
 # and user's libraries used 

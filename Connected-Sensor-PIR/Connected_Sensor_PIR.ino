@@ -221,14 +221,18 @@ byte bootcount = 0;         // Counts reboots
 int bootCountAddr = 0;      // Address for Boot Count Number
 
 
-// Add setup code
+// Add setup code 
 void setup()
 {
-    wdt_reset();                            // Don't get caught in reset loop
-    wdt_disable();                          // In case reset from WDT - will still be enabled
-    bootcount = EEPROM.read(bootCountAddr); // Here is where we will track reboots by month
-    bootcount++;
-    EEPROM.write(bootCountAddr, bootcount);
+    wdt_reset();                                // Don't get caught in reset loop
+    bootCountAddr = EEPROM.read(0);             // Here is where we will track reboots by month - offset stored in 0 byte
+    bootcount = EEPROM.read(bootCountAddr);     // Use the offset to get to this month's boot count
+    if (WDTCSR)                                 // Here we see if the reset occured due to a Watchdo timer reset
+    {
+        wdt_disable();                          // In case reset from WDT - will still be enabled
+        bootcount++;                            // Increment the boot count
+        EEPROM.write(bootCountAddr, bootcount); // Write it back into the correct spot
+    }
     Wire.begin();
     Serial.begin(9600);                     // Initialize communications with the terminal
     Serial.println("");                     // Header information
@@ -318,6 +322,15 @@ void setup()
     
     Serial.print(F("Free memory: "));
     Serial.println(freeRam());
+    
+    Serial.print(F("Setting the boot count month offset: "));
+    TakeTheBus();
+        t = RTC.get();
+    GiveUpTheBus();
+    bootCountAddr = month(t);       // Boot counts are offset by month to reduce burn - in risk
+    EEPROM.update(0, bootCountAddr);    // Will update the month if it has changed but only at reboot
+    Serial.println(EEPROM.read(0));      // Print so we can see if code is working
+    
     
     SetPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
 }
@@ -539,9 +552,7 @@ void CheckForBump() // This is where we check to see if an interrupt is set when
     digitalWrite(REDLED,ledState);
     PIRInt = false; // Reset the flag
     TakeTheBus();
-        ClearPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
         t = RTC.get();
-        SetPinChangeInterrupt(PIRPIN);      // Attach the PinChange Interrupt
         Serial.print(".");
     GiveUpTheBus();
     Serial.print(".");
@@ -680,7 +691,7 @@ void SetTimeDate()  // Function to set the date and time from the terminal windo
         continue;
     }
     tm.Month = Serial.parseInt();
-    Serial.println(F("Enter the Year (0-99): "));
+    Serial.println(F("Enter the Year (e.g. 2017): "));
     while (Serial.available() == 0) {  // Look for char in serial queue and process if found
         continue;
     }
@@ -757,6 +768,7 @@ void sleepNow()
     sleep_cpu ();            // here the device is put to sleep
     sleep_disable ();         // first thing after waking from sleep:
     power_all_enable ();   // power everything back on
+    delay(5);               // This small delay gives the i2c bus time to reinitialize
     Serial.begin(9600);   // Restart Serial
     Serial.println("Waking up");
 }

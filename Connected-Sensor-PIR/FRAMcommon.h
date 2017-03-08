@@ -143,7 +143,7 @@ void ResetFRAM()  // This will reset the FRAM - set the version and preserve del
     FRAMwrite8(VERSIONADDR,VERSIONNUMBER);  // Reset version to match #define value for sketch
 }
 
-boolean TakeTheBus()
+boolean TakeTheBus()  // Now includes watchdog timer
 {
     //Serial.print(F(Asking for the bus..."));
     wdt_reset();            // Reset before we set the timer.
